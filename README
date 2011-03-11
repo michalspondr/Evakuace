@@ -1,7 +1,9 @@
 Simulace evakuacniho procesu
 -----------------------------
-autor: Michal Spondr (xspond00)
+autor: Michal Spondr
 
 Program se sestavi prikazem make.
 Dokumentace se nachazi v adresari doc/. V podadresari doc/html/ je programova dokumentace vygenerovana programem Doxygen. Tu je mozne vygenerovat znovu pomoci konfiguracniho souboru Doxyfile.
+
+For english-speaking people: Unfortunatelly this project was supposed to be created for czech people so I didn't use english comments and I don't plan to rewrite it.
 
