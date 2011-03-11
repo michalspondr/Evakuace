@@ -1,0 +1,197 @@
+\documentclass{article}
+\usepackage[latin2]{inputenc}
+\usepackage[czech]{babel}
+\usepackage{graphicx}
+%\usepackage{pstricks}
+\pagestyle{headings}
+\author{Michal ©pondr}
+\title{Simulace evakuaèního procesu}
+\date{\today}
+\begin{document}
+\maketitle
+%\tableofcontents
+\section{Úvod a popis simulovaného modelu}\label{uvod}
+Tento projekt vychází ze èlánku \emph{Simulation of evacuation processes using a~bio\-nics-in\-spi\-red cellular automaton model for pedestrian dynamics} autorù Ansgar Kirchner a Andreas Schadschneider z~Institut für Theoretische Physik. Universität zu Köln, vydaný 22.~3.~2002. Dále budu odkazovat na tuto literaturu pou¾itím slova \emph{èlánek}.
+
+Dynamika pohybu vozidel patøí k~èastým tématùm fyzikálních modelù. Dynamika pohybu chodcù ji¾ tak èasto zpracovávaná není, jeliko¾ ji nelze popsat tak snadno jako dynamiku pohybu vozidel -- na vozovce jsou dána pravidla, která vozidla dodr¾ují, zatímco pro chùzi ¾ádná taková pravidla nejsou. Byly v¹ak pozorovány nìkteré zajímavé jevy, které se u~dynamiky chodcù vyskytují, napøíklad shlukování, tvoøení front, oscilace u~tzv. úzkých hrdel u~skupin jdoucích proti sobì, èi vzory pohybu v~køí¾icích se cestách.\\
+Model se inspiruje procesem chemotaxe\footnote{Chemotaxe je pohyb buòky ve smìru chemického gradientu. Napøíklad nìkteré bílé krvinky putují do míst zánìtu, v~nich¾ vznikají specifické chemické látky (mediátory). -- zdroj Wikipedia}. Podobnì jako napøíklad mravenci zanechávají stopy pro navigaci ostatních jedincù, i~chodci nechávají podobnou cestu. Jde v¹ak o~jakousi virtuální trasu, která existuje jen v~mysli chodce. V~reálném svìtì to odpovídá napøíklad následování stejné cesty, jakou má chodec jdoucí vepøedu.\\
+
+Tento model pou¾ijeme pro simulaci evakuace lidí z~místnosti. Pøi této situaci mù¾e dojít k~panickým situacím, které jsou na simulaci velmi slo¾ité, ale pokusíme se tyto stavy zohlednit také.\\
+Metoda ovìøování vlivu ka¾dého chodce s~ka¾dým je nároèná na prostøedky (slo¾itost O($N^2$)). Zde pou¾itý model ovìøuje pouze své nejbli¾¹í okolí, má tedy slo¾itost O($N$).
+\section {Koncepce modelu}
+Model (místnosti) je rozdìlen na buòky, které mohou být buï prázdné nebo obsazené právì jedním chodcem. Ka¾dý chodec se mù¾e s~urèitou prav\-dì\-po\-dob\-no\-stí pøesunout ètyømi smìry na sousední buòku (nahoru, dolù, vlevo, vpravo; nikoliv diagonálnì); jde o~Von-Neumannovùv typ okolí (slidy SNT.pdf, str.~129).\\
+Pravdìpodobnost pøechodu je vypoètena podle interakce dvou \emph{polí podlahy} -- statické pole (S) a dynamické pole (D).
+\subsection{Statické pole podlahy}
+Statické pole se v~èase nemìní, není ovlivòováno chodci. Urèuje oblasti místnosti, které jsou nìjakým zpùsobem atraktivní, napøíklad únikové východy nebo okna. Zde statické pole popisuje nejkrat¹í cestu k~východovým dveøím.\\
+Pro výpoèet hodnot statického pole byla zvolena metrika pou¾itá ve èlánku. Hodnota statického pole v~místì $(i,j)$ se vypoèítá:\footnote{V~èlánku se vyskytuje hodnota $\min_{(i_{T_s},j_{T_s})}$, pøedpokládám, ¾e jde jen o~chybu v~zápisu; dále v~èlánku i~v~po\-pi\-su modelu je hodnota poèítána jako $\max_{(i_{T_s},j_{T_s})}$.}
+\begin{displaymath}
+S_{ij} = \max_{(i_{T_s},j_{T_s})} \big\{ \max_{(i_l,j_l)} \{ \sqrt{(i_T - i_l)^2 + (j_{T_s} - j_l)^2} \} - \sqrt{(i_{T_s} - i)^2 + (j_{T_s} - j)^2}\big\}.
+\end{displaymath}
+Síla statického pole je dána nejkrat¹í vzdáleností k~východu. Nejvìt¹í vzdálenost ze v¹ech bunìk od východu $(i_{T_s},j_{T_s})$ je $\max_{(i_l,j_l)} \{ \sqrt{(i_T - i_l)^2 + (j_{T_s} - j_l)^2} \}$, kde $(i_l,j_l)$ jde pøes v¹echny buòky møí¾ky (\emph{l}attice). Tato hodnota díky normalizaci roste: èím blí¾e je k~východu, a je nulová v~nejvzdálenìj¹ím bodì od východu. Pøíklady statických polí jsou v~podèásti \ref{prikladymistnosti}.
+\subsection{Dynamické pole podlahy}
+Dynamické pole je virtuální cesta vytváøená chodci. Slou¾í k~modelování atraktivity interakce mezi èásticemi. Jakmile èástice $(i,j)$ pøeskoèí na vedlej¹í buòku, zvý¹í se hodnota pùvodní buòky o~1: $D_{ij} \rightarrow D_{ij}+1$.\\
+Dynamické pole D má nezáporné hodnoty, lze jej pøirovnat k~poli bosonù\footnote{Zjednodu¹ený model popisující pole fermionù byl popsán v~èásti \ref{uvod} v~souvislosti s~chemotaxí}. Chodci pøi svém pøesunu ,,upou¹tìjí'' bosony a tvoøí tak virtuální cestu. Dynamické pole je nezávislé na èase, parametry, které jej ovlivòují, jsou \emph{rozptyl} $\alpha \in [0,1]$ a \emph{slábnutí} $\delta \in [0,1]$. V~ka¾dém kroku simulace ka¾dý boson zeslábne s~pravdìpodobností $\delta$ a rozptýlí se do nìkterého ze sousedních bunìk s~pravdìpodobností $\alpha$.
+\subsection{Krok modelu}
+Pravidla pro aktualizaci jednoho kroku modelu jsou následující:
+\begin{enumerate}
+\item Dynamické pole D projde procesem zeslábnutí nebo rozptylu, jak bylo popsáno v~pøedchozí podèásti.
+\item Pro ka¾dého chodce se vypoète pravdìpodobnost pøechodu $p_{ij}$ na neobsazenou buòku $(i,j)$. Hodnoty polí podlah D a S jsou vá¾eny koeficienty citlivosti $k_S \in [0, \infty]$ a $k_D \in [0, \infty]$. Vzorec tedy je:
+\begin{displaymath}
+p_{ij} = \frac{
+\exp{k_D D_{ij}} \exp{k_S S_{ij}}(1-n_{ij})\xi_{ij}
+}{
+\sum_{i,j}\exp{k_D D_{ij}} \exp{k_S S_{ij}}(1-n_{ij})\xi_{ij}
+},
+\end{displaymath}
+kde $n_{ij} = 0,1$ znaèí obsazenost buòky; $\xi_{ij} = 0$ pro zakázané buòky (zdi), jinak $1$. Suma ve jmenovateli znaèí normalizaci hodnot.
+\item Ka¾dý chodec si vybere koncovou buòku podle vypoètených prav\-dì\-po\-dob\-no\-stí. Vyøe¹í se pøípadné konflikty, pokud chce více chodcù vstoupit na jednu buòku. Pokud se mù¾e pohybovat, pøesune se na danou buòku.
+\item V¹echny pohybující se èástice zvý¹í hodnotu D v~daném místì.
+\end{enumerate}
+V¹echny zmìny se provádí zároveò, aktualizace je paralelní.\\
+
+Dle èlánku model ukazuje, ¾e jednoduchá pravidla a dvì pole podlah do\-sta\-èu\-jí k~do\-sa\-¾e\-ní bohatosti slo¾itého jevu. Tento zpùsob výpoètu je vhodný pro simulace davù v~reálném èase napøíklad ve veøejných budovách. Napøíklad pro vìt¹í obeznámenost chodcù s~tvarem místnosti a umístìním východù (a tedy zvý¹ení povìdomí o~statickém poli, co¾ znaèí zvednutí konstanty $k_S$) by bylo mo¾né dávat na zdi nebo podlahu smìrová znamení, pokud by simulace ukázala, ¾e chodci se zbyteènì shlukují na nìjakém místì.
+%\section{Simulace evakuace}
+%Podívejme se na nìkteré typické pøíklady. Zamìøíme se na vliv parametrù $k_D$ a $k_S$.
+\section{Architektura a implementace simulátoru}
+Celulární automat (slidy SNT.pdf, str.~127) byl naprogramován v~programovacím jazyce C++, dùvodem je kromì pøenositelnosti hlavnì kompromis mezi jednoduchostí vývoje a rychlostí výsledného programu.\\
+Výstup programu je provádìn do textového terminálu v podobì jednoduchého textového obrázku; tato volba byla zvolena proto, ¾e je zde podstatná samotná simulace a výstup dostaèuje textový. Znak {\large \textsf{@}} odpovídá chodci, {\large \textsf{X}} pøedstavuje neprùchodnou pøe\-ká¾\-ku (zeï). Pro pøehlednìj¹í zobrazení byla pou¾ita knihovna \emph{ncurses}\footnote{http://www.gnu.org/software/ncurses/}, která umo¾òuje snadné pøekreslování terminálu.\\
+\subsection{Spu¹tìní programu}
+Program lze sestavit pøíkazem \textsf{make}, \textsf{make clean} vyma¾e vytvoøené soubory vèetnì spustitelného.\\
+Aplikace po spu¹tìní (název spustitelného souboru je \textsf{evacuation}) zobrazí okno, pod kterým je vypisován poèet zbývajících chodcù v~místnosti a ubìhlý èas (èas je zde bezrozmìrná velièina, která odpovídá poètu krokù automatu. Program se zastaví, jakmile v~místnosti není ¾ádný chodec. Ukonèení a návrat do terminálu se provede stiskem libovolné klávesy.\\
+
+Program má nìkolik parametrù, které umo¾òují nastavit chod simulace.\\
+\begin{itemize}
+\item \textsf{-a} pøirozené èíslo -- nastavuje ¹íøku generovaného pole
+\item \textsf{-h} pøirozené èíslo -- nastavuje vý¹ku generovaného pole
+\item \textsf{-p} pøirozené èíslo -- poèet chodcù v~místnosti
+\item \textsf{-d} reálné èíslo 0.0-1.0 -- rozptyl udávající, s~jakou pravdìpodobností se hodnota buòky dynamického pole roz¹íøí na nìjakou z~okolních bunìk
+\item \textsf{-e} reálné èíslo 0.0-1.0 -- slábnutí udávající, s~jakou pravdìpodobností se sní¾í hodnota buòky dynamického pole o~1
+\item \textsf{-s} reálné èíslo -- hodnota konstanty $k_S$ statické vrstvy, která udává, jak velký význam tato vrstva má
+\item \textsf{-k} reálné èíslo -- hodnota konstanty $k_D$ dynamické vrstvy, která udává, jak velký význam tato vrstva má
+\item \textsf{-r} pøirozené èíslo -- sùl generující tvorbu náhodných èísel, implicitnì není zadáno a èíslo je generováno náhodnì
+\item \textsf{-t} pøirozené èíslo -- èas v~mikrosekundách udávající dobu trvání zobrazení jednoho kroku simulace
+\item \textsf{-a} èíslo 0, 1, 2, 3, 4 -- èíslo urèující typ místnosti, které jsou uvedeny v~podèásti \ref{prikladymistnosti}
+\item \textsf{-u} -- nastavením tohoto pøíznaku se lze posouvat v~simulaci stiskem libovolné klávesy
+\end{itemize}
+\subsection{Pou¾ité typy místností}\label{prikladymistnosti}
+Pro demonstraci simulace bylo vytvoøeno 5 rùzných typù místností, které lze v~programu zvolit volbou \textsf{-a} a èíslem 0 a¾ 4. Uka¾me si následující místnosti.\\
+
+\subsubsection{Místnost 0 -- jedny dveøe uprostøed v~horní èásti místnosti}
+Takto vypadá statické pole místnosti. Mù¾eme vidìt, ¾e nejvy¹¹í hodnota je u~východu.
+\footnotesize{
+\begin{verbatim}
+XXXXXXXXXXXXXXXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXXX
+X                                                X
+X                                                X
+X                                                X
+X                                                X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+\end{verbatim}
+}
+\begin{figure}[!h]
+\begin{center}
+\includegraphics[width=0.8\textwidth, keepaspectratio]{0}
+\caption{Statické pole místnosti 0}
+\end{center}
+\end{figure}
+
+\subsubsection{Místnost 1 -- dvoje dveøe v~horní èásti místnosti}
+Pøi simulaci se chodci rovnomìrnì hromadí okolo obou východù.
+\footnotesize{
+\begin{verbatim}
+XXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXX-XXXXXXXXXXXXX
+X                                                X
+X                                                X
+X                                                X
+X                                                X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+\end{verbatim}
+}
+\begin{figure}[!h]
+\begin{center}
+\includegraphics[width=0.8\textwidth, keepaspectratio]{1}
+\caption{Statické pole místnosti 1}
+\end{center}
+\end{figure}
+\newpage
+\subsubsection{Místnost 2 -- ètyøi dveøe, dvoje v~horní èásti a dvoje v~dolní èásti místnosti}
+Zde se chodci rovnomìrnì rozmístí mezi 4~východy.
+\footnotesize{
+\begin{verbatim}
+XXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXX-XXXXXXXXXXXXX
+X                                                X
+X                                                X
+X                                                X
+X                                                X
+XXXXXXXXXXXX-XXXXXXXXXXXXXXXXXXXXXXX-XXXXXXXXXXXXX
+\end{verbatim}
+}
+\begin{figure}[!h]
+\begin{center}
+\includegraphics[width=0.8\textwidth, keepaspectratio]{2}
+\caption{Statické pole místnosti 2}
+\end{center}
+\end{figure}
+
+\subsubsection{Místnost 3 -- dvoje dveøe v~levé horní èásti místnosti}
+Chodci vyplní celou levou stìnu místnosti. Není-li místnost dostateènì vysoká, nemá dav takový kulovitý tvar, jako okolo dveøí uprostøed stìny.
+\footnotesize{
+\begin{verbatim}
+X-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+-                                                X
+X                                                X
+X                                                X
+X                                                X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+\end{verbatim}
+}
+\begin{figure}[!h]
+\begin{center}
+
+\includegraphics[width=0.8\textwidth, keepaspectratio]{3}
+\caption{Statické pole místnosti 3}
+\end{center}
+\end{figure}
+\newpage
+\subsubsection{Místnost 4 -- 9 dveøí v~horní èásti místnosti a jedny dveøe v~pravé èásti místnosti}
+Zde se dav obvykle rozdìlí do 2~èástí. Jedna odchází dveømi vlevo nahoøe, druhá dveømi v~pravé stìnì. Zde je viditelný vliv dynamické vrstvy -- chodci se sna¾í opustit místnost dveømi, kterými je opou¹tí ostatní, i~kdy¾ mají blí¾e nìjaké volné dveøe.
+\footnotesize{
+\begin{verbatim}
+XXXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX
+X                                                X
+X                                                X
+X                                                -
+X                                                X
+X                                                X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+\end{verbatim}
+}
+\begin{figure}[!h]
+\begin{center}
+\includegraphics[width=0.8\textwidth, keepaspectratio]{4}
+\caption{Statické pole místnosti 4}
+\end{center}
+\end{figure}
+%Obrázek je u~tohoto pøíkladu zrcadlovì obrácený (dveøe jsou jakoby vpravo), je to jen kvùli lep¹í vizualizaci.
+\subsection{Vlivy parametrù $k_S$ a $k_D$}\label{vlivykskd}
+Experimenty ukazují, ¾e pro $k_S \rightarrow 0$ k~odchodu lidí z~místnosti nedojde. Jejich pohyb je chao\-tic\-ký a náhodný, neexistuje ¾ádné podvìdomí o~vzhledu místnosti. Chodci pak dospìjí do nìjakého bodu, z~kterého u¾ se nedostanou, hodnoty dynamické vrstvy budou pøíli¹ vysoké. Tato hodnota $k_S$ neodpovídá realitì, èlovìk vìt¹inou nìjaký pøehled o~svém okolí má. Pro hodnotu 1 do¹lo k velmi pomalému úbytku chodcù, zøejmì jde o nevhodnì nastavené implicitní hodnoty (dynamická vrstva pøíli¹ rychle zeslábne, hodnoty se málo ¹íøí\ldots) Se zvy¹ujícími se hodnotami $k_S$ rychlost narùstá, pro $k_S \rightarrow \infty$ získává chodec absolutní znalost místnosti a míøí nejkrat¹í mo¾nou cestou k~východu. $k_S$ a statické pole jsou hlavními parametry ovlivòující cestu chodcù.\\
+
+$k_D$ a dynamické pole se chovají spí¹e jako dodateèný ¹um, ovlivòující $k_S$ a statické pole, v~podstatì dobu vyprázdnìní místnosti prodlu¾uje. Nicménì je dùle¾itý pro odraz chování lidí. Pro hodnoty $k_D \rightarrow 0$ je vliv dynamického pole nepatrný a chodci odcházejí díky hodnotám statického pole. Se zvy¹ující se hodnotou $k_D$ roste chaotický pohyb obzvlá¹tì v~místech, která mají nízkou hodnotu $k_S$ (= statické pole zde nemá témìø ¾ádný vliv). Zde se chodci pohybují stádnì, následují ostatní a mù¾e se stát, ¾e dospìjí k~nìjakému lokálnímu extrému, z~kterého u¾ se k~východu nedostanou.
+\subsection{Vlivy parametrù $\alpha$ a $\delta$}
+Máme-li konstantní hodnoty $k_S$ a $k_D$, mù¾eme porovnávat vliv hodnot rozptylu $\alpha$ a slábnutí $\delta$, které ovlivòují hodnoty dynamického pole D.\\
+$\alpha \rightarrow 0$ zpùsobuje, ¾e D není ru¹eno, se zvy¹ující se hodnotou $\alpha$ dochází ke zvy¹ování evakuaèní doby. Rozptyl tedy znamená jen dodateèný ¹um, vysoká hodnota není výhodná.\\
+$\delta \rightarrow 0$ zpùsobuje, ¾e hodnota D pøetrvává del¹í dobu a jak bylo øeèeno v~podèásti \ref{vlivykskd}, dynamická vrstva je zde spí¹e ne¾ádoucí ¹um. Èím je hodnota $\delta$ vy¹¹í, tím více zpùsobuje slábnutí dynamické vrstvy a zrychlení doby evakuace.
+\subsection{Námìty k~dal¹ímu vylep¹ení}
+Simulátor by bylo mo¾né vylep¹it v~øadì smìrù. Napøíklad pøidáním vìt¹í in\-ter\-ak\-ti\-vi\-ty (vy\-tvá\-øe\-ní vlastních místností za chodu, pøidávání chodcù, zmìna parametrù za bìhu atd.) Také by se hodil nìjaký generátor jiných místností, ne¾ jsou obdélníkové.\\
+Dále si myslím, ¾e by bylo tøeba více promyslet výpoèet dynamické vrstvy, který dle mého názoru neodpovídá realitì (chodci se dostávají do lokálních extrémù, z~kterých se nedostanou ven). Úprava by mohla spoèívat v~peèlivìj¹ím výbìru koeficientu $k_D$ (hodnota by se mohla napøíklad dynamicky mìnit), pøípadnì v jiném výpoètu hodnot dynamického pole, který by dokázal tyto lokální extrémy vyru¹it.\\
+Také jsem vypozoroval, ¾e se v~nakupených skupinách okolo východù chodci netlaèí. Tedy ¾e dojde k~uvolnìní místa pøed chodcem smìrem k~východu, ale on i~pøesto zvolí ménì výhodný krok napøíklad vzad. V~reálu lidé v~davu krok vzad nedìlají. Mo¾nou zmìnou by byla vý¹e zmínìná dynamická zmìna $k_S$ a $k_D$, kdy v~okam¾iku, kdy chodec východ vidí, by se $k_D$ sní¾ilo k~0 a $k_S$ zvý¹ilo.\\
+Aplikace dále nará¾í na limity dané velikostí rozsahu promìnných. Výpoèet pravdìpodobnosti pou¾ívá exponenciální funkci a vezmeme-li maximální velikost typu double, tj. 1.79769e+308, zji¹»ujeme, ¾e nejvy¹¹í hodnota funkce exp() mù¾e být zhruba 709. Je-li místnost veliká, mù¾e se stát, ¾e tato hodnota bude pøekroèena, tím dojde k~pøeteèení této promìnné a ke ¹patnému výpoètu. Pøíkladem mù¾e být simulace \textsf{./evacuation -a 3 -w 141} a \textsf{./evacuation -a 3 -w 142} (a vy¹¹í hodnoty parametry \textsf{-w}) -- zde vidíme, ¾e chodci z místnosti ne\-o\-dej\-dou, proto¾e pøi výpoètu dojde k~pøeteèení a pravdìpodobnost pøechodu na pole s~dveømi je 0\%.
+\newpage
+\section{Shrnutí a závìr}
+Vytvoøil jsem simulátor, který simuluje model popsaný ve èlánku \emph{Simulation of evacuation processes using a~bio\-nics-in\-spi\-red cellular automaton model for pedestrian dynamics}. Model demonstruje evakuaci lidí z~uzavøené místnosti, bere v~potaz jak samotný tvar místnosti a pozici východù (statická vlastnost), tak chování lidí v~davu, jako napø. stádové chování, panika, zácpy, \ldots (dynamická vlastnost). Simulátor je napsán v~programovacím jazyce C++ a pou¾ívá knihovnu ncurses. Má výstup do textové konzole a nastavuje se parametry v~pøíkazové øádce, má 5~pøednastavených typù místností.\\
+
+Na základì experimentù se domnívám, ¾e práce s~dynamickým pole ne zcela odpovídá reálnému chování, je tøeba hledat vhodné koeficienty $k_D$, $\alpha$ a $\delta$ pro konkrétní místnost. V~pøeplnìných místnostech se mù¾e bìhem shlukování u~vchodu stát, ¾e velmi naroste hodnota dynamické vrstvy na urèité buòce a po uvolnìní okolních bunìk nemá chodec tendenci se pøesouvat jinam a uvázne na nìjakou dobu na jednom místì, ne¾ hodnota D na dané buòce dostateènì zeslábne. Teoreticky by tento stav mohl odpovídat napøíklad nìjakému psychickému zkolabování jedince, nicménì o~této mo¾nosti jsem v~èlánku nic nena¹el a proto to pova¾uji spí¹e za chybu algoritmu. Ve èlánku samotném autoøi zmiòují, ¾e tento model pøedstavuje pouze jednoduchý scénáø. V~reálném svìtì má ka¾dý jednotlivec vlastní $k_S$ a $k_D$ a øe¹ení nahrává spí¹e pou¾ití agentních systémù.\\
+Ponecháme-li $k_D$ velmi malé a zvý¹íme-li $k_S$, chodci se pìknì hromadí okolo východù, k~¾ád\-né\-mu uváznutí èi zablokování jednotlivcù nedochází. Vychází to tedy ,,pìknì'', v~situacích, kde chodci místnost výbornì znají, by mohlo k~takové ideální evakuaci dojít.\\
+
+Simulaci by ¹lo v~praxi pou¾ít napøíklad pro ovìøení, kudy se budou chodci pohybovat a na místa, kde by docházelo k~lokálním extrémùm, pou¾ít nìjaké prvky (znaèky, ¹ipky, nápisy), které by zvý¹ily hodnotu statického pole a chodce tak nasmìrovaly a vyvedly z~tohoto lokálního extrému ven.
+\end{document}
